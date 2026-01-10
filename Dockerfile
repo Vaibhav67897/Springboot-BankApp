@@ -1,15 +1,13 @@
 #----------------------------------
-# Stage 1
+# Stage 1: Build
 #----------------------------------
 
-# Import docker image with maven installed
-FROM maven:3.8.3-openjdk-17 as builder 
+# Maven with Java 17 (Eclipse Temurin - official & maintained)
+FROM maven:3.9.9-eclipse-temurin-17-alpine AS builder
 
-# Add maintainer, so that new user will understand who had written this Dockerfile
-MAINTAINER Madhup Pandey<madhuppandey2908@gmail.com>
-
-# Add labels to the image to filter out if we have multiple application running
-LABEL app=bankapp
+# MAINTAINER deprecated → LABEL use karo (warning fix)
+LABEL maintainer="Madhup Pandey <madhuppandey2908@gmail.com>"
+LABEL app="bankapp"
 
 # Set working directory
 WORKDIR /src
@@ -21,13 +19,13 @@ COPY . /src
 RUN mvn clean install -DskipTests=true
 
 #--------------------------------------
-# Stage 2
+# Stage 2: Runtime (small image)
 #--------------------------------------
 
-# Import small size java image
-FROM openjdk:17-alpine as deployer
+# openjdk:17-alpine removed → Eclipse Temurin (official OpenJDK builds)
+FROM eclipse-temurin:17-jre-alpine AS deployer
 
-# Copy build from stage 1 (builder)
+# Copy JAR from builder stage
 COPY --from=builder /src/target/*.jar /src/target/bankapp.jar
 
 # Expose application port 
