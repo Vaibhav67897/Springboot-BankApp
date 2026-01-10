@@ -9,66 +9,57 @@ env:
   DOCKER_IMAGE: vaibhs123/bankapp
   DOCKER_TAG: v${{ github.run_number }}
 
+permissions:
+  contents: write  # Git push के लिए
+
 jobs:
-  # 1) Cleanup job (optional, simple)
-  cleanup:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Cleanup workspace
-        run: rm -rf *
-
-  # 2) Build & push Docker image (NO dind)
-  build-image:
-    needs: cleanup
+  ci-cd:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Login to Docker Hub
-        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-
-      - name: Build and push Docker image
-        run: |
-          docker build -t ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }} .
-          docker push ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
-
-  # 3) Update Kubernetes manifest file
-  update-k8s-manifest:
-    needs: build-image
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Update Kubernetes manifest
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y sed grep
-          echo "Before SED:"
-          grep 'image:' kubernetes/bankapp-deployment.yml || true
-          sed -i -e "s|vaibhs123/bankapp:.*|vaibhs123/bankapp:${{ env.DOCKER_TAG }}|g" kubernetes/bankapp-deployment.yml
-          echo "After SED:"
-          grep 'image:' kubernetes/bankapp-deployment.yml || true
-
-  # 4) Commit & push updated manifest to DevOps branch
-  git-push:
-    needs: update-k8s-manifest
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout DevOps branch
         uses: actions/checkout@v4
         with:
-          ref: DevOps
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0  # Git history के लिए
 
-      - name: Setup Git
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
+            ${{ env.DOCKER_IMAGE }}:latest
+
+      - name: Verify & Update Kubernetes manifest
         run: |
-          git config --global user.email "ci@github.com"
-          git config --global user.name "GitHub Actions"
+          if [ ! -f "kubernetes/bankapp-deployment.yml" ]; then
+            echo "❌ Manifest file not found!"
+            ls -la kubernetes/ || echo "No kubernetes folder"
+            exit 1
+          fi
+          
+          echo "📋 Before SED:"
+          grep -n 'image:' kubernetes/bankapp-deployment.yml
+          
+          # Exact line replace (non-greedy, first occurrence)
+          sed -i "s|image: vaibhs123/bankapp:[^[:space:]]*|image: vaibhs123/bankapp:${{ env.DOCKER_TAG }}|g" kubernetes/bankapp-deployment.yml
+          
+          echo "✅ After SED:"
+          grep -n 'image:' kubernetes/bankapp-deployment.yml
+          echo "Updated to ${{ env.DOCKER_TAG }}"
 
       - name: Commit and push updated manifest
         run: |
-          git add kubernetes/bankapp-deployment.yml || true
-          git commit -m "Updated Docker image version to ${{ env.DOCKER_TAG }}" || echo "Nothing to commit"
-          git push origin DevOps
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          
+          git add kubernetes/bankapp-deployment.yml
+          git commit -m "chore: update image to ${{ env.DOCKER_TAG }} [skip ci]" || echo "✅ No changes or up-to-date"
+          git push origin HEAD:DevOps
