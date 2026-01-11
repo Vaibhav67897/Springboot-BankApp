@@ -1,5 +1,4 @@
 name: CI/CD Pipeline (Docker + K8s + Git push)
-
 on:
   push:
     branches: [ DevOps, develop ]
@@ -14,13 +13,13 @@ permissions:
 
 jobs:
   ci-cd:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted]  # ARC runner use करेगा (bankapp-runner)
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0  # Git history के लिए
+          fetch-depth: 0
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -48,12 +47,10 @@ jobs:
           echo "📋 Before SED:"
           grep -n 'image:' kubernetes/bankapp-deployment.yml
           
-          # Exact line replace (non-greedy, first occurrence)
           sed -i "s|image: vaibhs123/bankapp:[^[:space:]]*|image: vaibhs123/bankapp:${{ env.DOCKER_TAG }}|g" kubernetes/bankapp-deployment.yml
           
           echo "✅ After SED:"
           grep -n 'image:' kubernetes/bankapp-deployment.yml
-          echo "Updated to ${{ env.DOCKER_TAG }}"
 
       - name: Commit and push updated manifest
         run: |
@@ -61,5 +58,6 @@ jobs:
           git config user.email "actions@github.com"
           
           git add kubernetes/bankapp-deployment.yml
-          git commit -m "chore: update image to ${{ env.DOCKER_TAG }} [skip ci]" || echo "✅ No changes or up-to-date"
+          git commit -m "chore: update image to ${{ env.DOCKER_TAG }} [skip ci]" || echo "✅ No changes"
           git push origin HEAD:DevOps
+
