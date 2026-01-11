@@ -3,7 +3,7 @@ kind: RunnerDeployment
 metadata:
   name: bankapp-runner
 spec:
-  replicas: 10
+  replicas: 5
   template:
     spec:
       repository: Vaibhav67897/Springboot-BankApp
