@@ -1,0 +1,11 @@
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: bankapp-runner
+spec:
+  replicas: 1  # Adjust as needed
+  template:
+    spec:
+      repository: Vaibhav67897/Springboot-BankApp  # Fixed: owner/repo format only
+      # Other fields like dockerEnabled: true, labels, etc. remain unchanged
+
