@@ -3,9 +3,18 @@ kind: RunnerDeployment
 metadata:
   name: bankapp-runner
 spec:
-  replicas: 10  # Adjust as needed
+  replicas: 10
   template:
     spec:
-      repository: Vaibhav67897/Springboot-BankApp  # Fixed: owner/repo format only
-      # Other fields like dockerEnabled: true, labels, etc. remain unchanged
+      repository: Vaibhav67897/Springboot-BankApp
+      dockerEnabled: true
+      privileged: true
+      resources:
+        requests:
+          cpu: "1"
+          memory: 2Gi
+        limits:
+          cpu: "4"
+          memory: 8Gi
+      labels: ["self-hosted", "docker"]
 
