@@ -18,16 +18,56 @@ jobs:
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+      SONAR_PROJECT_KEY: bankapp
+      SONAR_PROJECT_NAME: bankapp
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+          cache: maven
 
       - name: Validate secrets
         run: |
           test -n "$AWS_REGION" || (echo "AWS_REGION is empty" && exit 1)
           test -n "$ECR_REPOSITORY" || (echo "ECR_REPOSITORY is empty" && exit 1)
           [ -n "${{ secrets.AWS_ROLE_ARN }}" ] || (echo "AWS_ROLE_ARN is empty" && exit 1)
+          [ -n "${{ secrets.SONAR_TOKEN }}" ] || (echo "SONAR_TOKEN is empty" && exit 1)
+          [ -n "${{ secrets.SONAR_HOST_URL }}" ] || (echo "SONAR_HOST_URL is empty" && exit 1)
+
+      - name: Build without tests
+        run: mvn -B clean package -DskipTests
+
+      - name: Create SonarQube project if missing
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_PROJECT_KEY: bankapp
+          SONAR_PROJECT_NAME: bankapp
+        run: |
+          curl -s -u "${SONAR_TOKEN}:" \
+            -X POST "${SONAR_HOST_URL}/api/projects/create" \
+            -d "project=${SONAR_PROJECT_KEY}" \
+            -d "name=${SONAR_PROJECT_NAME}" || true
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}
+            -Dsonar.projectName=${{ env.SONAR_PROJECT_NAME }}
+            -Dsonar.sources=src/main
+            -Dsonar.java.binaries=target/classes
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -46,8 +86,7 @@ jobs:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker push $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker tag $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $REGISTRY/$ECR_REPOSITORY:latest
-          docker push $REGISTRY/$ECR_REPOSITORY:latest
-
+          docker build -t "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" .
+          docker push "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker tag "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" "$REGISTRY/$ECR_REPOSITORY:latest"
+          docker push "$REGISTRY/$ECR_REPOSITORY:latest"
